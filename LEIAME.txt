@@ -1,0 +1,159 @@
+BARBEARIA RETRÔ 2000 - Sistema de agendamento
+PIM II - Análise e Desenvolvimento de Sistemas - UNIP
+=====================================================
+
+O que é
+-------
+Um site de agendamento que roda no seu próprio computador.
+  - Páginas em HTML (com um pouco de CSS) geradas por um programa em C.
+  - O programa em C é o servidor: recebe os pedidos do navegador, aplica as regras e responde.
+  - Os dados ficam no banco SQLite, que é um único arquivo (barbearia.db).
+Não precisa de internet para rodar nem de instalar servidor de banco de dados.
+
+Arquivos
+--------
+  server.c      As páginas e as regras do sistema (agendar, login, relatórios...)
+  http.c / .h   O mini servidor web (sockets)
+  util.c / .h   Funções de apoio: senhas (SHA-256), datas, texto, formulários
+  schema.sql    O banco de dados: criação das tabelas
+  dados_exemplo.sql   Clientes e agendamentos de teste (opcional)
+  compilar.bat / compilar.sh    Transformam o código em programa
+  iniciar.bat / iniciar_com_exemplo.bat    Abrem o sistema no Windows
+
+PASSO A PASSO (Windows)
+-----------------------
+1) Instale o compilador gcc (só uma vez).
+   Jeito mais simples: baixe o WinLibs (winlibs.com), escolha a versão "Win64 / UCRT" em .zip,
+   extraia em C:\winlibs e adicione C:\winlibs\mingw64\bin no PATH do Windows.
+   Alternativa: MSYS2 (msys2.org) e depois, no terminal dele: pacman -S mingw-w64-ucrt-x86_64-gcc
+   Para conferir: abra o Prompt de Comando e digite  gcc --version
+
+2) Baixe o SQLite (só uma vez).
+   Entre em sqlite.org/download.html e baixe o arquivo "sqlite-amalgamation-XXXXXXX.zip"
+   (seção "Source Code"). Dentro dele, copie estes 2 arquivos para a MESMA pasta deste projeto:
+       sqlite3.c   e   sqlite3.h
+   (não precisa dos outros)
+
+3) Dê dois cliques em compilar.bat.
+   Na primeira vez demora cerca de 1 minuto. No fim ele cria o barbearia.exe.
+
+4) Dê dois cliques em iniciar.bat (ou iniciar_com_exemplo.bat, para já ter clientes e agendamentos de teste).
+   Deixe a janela preta aberta. Abra o navegador em:   http://localhost:8080
+   Para encerrar, feche a janela preta.
+
+PASSO A PASSO (Linux ou Mac)
+----------------------------
+   Coloque sqlite3.c e sqlite3.h na pasta (passo 2 acima), ou instale a biblioteca do sistema
+   (Ubuntu: sudo apt install libsqlite3-dev).   Depois:
+       sh compilar.sh
+       ./barbearia 8080            (ou ./barbearia 8080 exemplo)
+
+Usuários criados na primeira execução
+-------------------------------------
+  Dono            usuário: dono         senha: dono123
+  Barbeiros       usuários: barbeiro1, barbeiro2, barbeiro3     senha: barbeiro123
+  Recepcionista   usuário: recepcao     senha: recepcao123
+  Clientes        criam a conta pelo site (Criar conta).
+  Com os dados de exemplo:  cliente@exemplo.com, pedro@exemplo.com, lucas@exemplo.com, marcos@exemplo.com
+                            senha: cliente123
+Cada pessoa pode trocar a própria senha em "Minha conta".
+
+O que cada perfil faz
+---------------------
+  Visitante      vê endereço, telefone, serviços, preços e horários livres de cada barbeiro; cria conta para agendar.
+  Cliente        agenda, vê os próprios agendamentos, cancela, remarca, altera dados, troca senha, exclui a conta.
+  Barbeiro       vê a própria agenda, marca concluído/faltou/cancelado, bloqueia horários (almoço, folga).
+  Recepcionista  vê a agenda de todos, cria e cancela agendamentos (inclusive de quem não tem conta), redefine senha de cliente.
+                 Não mexe em preços, serviços nem logins.
+  Dono           faz tudo: funcionários, serviços e preços, configurações, relatórios, agenda geral.
+
+Como os horários funcionam
+--------------------------
+O dia é dividido em blocos de 30 minutos. Um serviço de 30 min ocupa 1 bloco; um de 60 min ocupa 2 blocos seguidos.
+Um barbeiro nunca fica com dois atendimentos no mesmo bloco (regra RN01, na função criar_agendamento).
+O horário de funcionamento e os dias abertos são iguais para todos os barbeiros; cada barbeiro bloqueia os seus horários livres.
+
+Ver o banco de dados
+--------------------
+O banco é o arquivo barbearia.db (criado na pasta na primeira execução).
+Para olhar as tabelas, baixe o "DB Browser for SQLite" (sqlitebrowser.org), abra o barbearia.db
+e use a aba "Executar SQL" para testar consultas (SELECT). Fica ótimo para mostrar ao professor.
+Backup: com o sistema fechado, copie o arquivo barbearia.db.
+Para começar do zero: feche o sistema e apague o barbearia.db.
+
+Tabelas (para a Etapa 4)
+------------------------
+  usuarios      id, nome, login, telefone, salt, senha_hash, perfil (cliente/barbeiro/recepcionista/dono), ativo, criado_em
+  servicos      id, nome, preco_centavos, duracao_min, ativo
+  agendamentos  id, cliente_id, nome_avulso, tel_avulso, barbeiro_id, servico_id, data, slot_inicio, slots, status, criado_em
+  config        chave, valor   (endereço, telefone, abertura, fechamento, dias_abertos, antecedencia_horas)
+Relações: usuarios 1:N agendamentos (como cliente), usuarios 1:N agendamentos (como barbeiro), servicos 1:N agendamentos.
+status: agendado, concluido, cancelado, faltou, bloqueado.
+
+Onde está cada requisito (para a Etapa 3)
+-----------------------------------------
+  RF01-RF03  ver informações, serviços, horários livres ........ pg_inicio, pg_horarios
+  RF04       criar conta ....................................... post_cadastro
+  RF05       entrar e sair ..................................... post_login, pg_sair
+  RF06       agendar ........................................... pg_horarios + post_agendar -> criar_agendamento
+  RF07       ver os próprios agendamentos ...................... pg_cliente
+  RF08       cancelar ou remarcar .............................. post_cancelar, post_agendar (campo remarcar)
+  RF09       alterar dados ..................................... post_conta_dados
+  RF10-RF13  área do barbeiro .................................. pg_barbeiro, post_status, post_bloquear
+  RF14-RF17  área da recepcionista ............................. pg_agenda, post_agendar_staff, exige()
+  RF18-RF23  área do dono ...................................... pg_dono, pg_funcionarios, pg_servicos, pg_config, pg_relatorios
+  RN01       sem dois agendamentos no mesmo horário ............ criar_agendamento (ocupacao)
+  RN02       só horários futuros ............................... criar_agendamento
+  RN03       um e-mail por conta ............................... UNIQUE em usuarios.login (schema.sql)
+  Sugestões que entraram:
+  RF24/RF28  redefinir senha ................................... post_resetar (dono e recepção) e post_conta_senha (o próprio usuário)
+  RF25       excluir a conta ................................... post_conta_excluir
+  RF26       horário de funcionamento .......................... pg_config, post_config
+  RF27       confirmação do agendamento ........................ mensagem de confirmação + lista em "Meus agendamentos"
+  RN04       duração do serviço em blocos ...................... criar_agendamento
+  RN05       antecedência mínima para cancelar ................. post_cancelar
+  RNF08      backup ............................................ copiar o arquivo barbearia.db (manual)
+
+Segurança aplicada (para a Etapa 7)
+-----------------------------------
+  - Senhas nunca são guardadas: só o hash SHA-256 de (salt + senha), com um salt diferente para cada usuário (util.c).
+  - Consultas ao banco usam parâmetros (sqlite3_bind_*), o que impede SQL injection.
+  - Todo texto digitado é "escapado" antes de ir para a tela (buf_esc), o que impede XSS.
+  - Cookie de sessão com HttpOnly e SameSite=Strict (reduz roubo de sessão e ataques CSRF).
+  - Controle de acesso por perfil em todas as páginas e ações (função exige()); o barbeiro só altera a própria agenda.
+  - O servidor só aceita conexões do próprio computador (127.0.0.1).
+  - LGPD: consentimento no cadastro e exclusão da conta pelo próprio cliente.
+  - Acessibilidade: rótulos nos campos, contraste alto, foco visível, link "pular para o conteúdo", funciona no celular.
+
+Limitações (vale citar no trabalho, na Etapa 8)
+-----------------------------------------------
+  - É uma demonstração local. Em produção seria preciso HTTPS, e senhas com bcrypt ou Argon2 (mais lentos e mais seguros que SHA-256).
+  - Atende um pedido por vez (suficiente para a demonstração).
+  - As sessões ficam na memória: ao fechar o programa, todo mundo sai.
+  - Não há limite de tentativas de login.
+  - No Windows, o código aleatório das sessões usa rand(), que é mais fraco que o do Linux.
+  - A redefinição de senha é feita pelo dono ou pela recepção, sem envio de e-mail.
+  - Pagamento online, lembretes por WhatsApp e aplicativo não foram feitos (evolução futura).
+
+Para a Etapa 5 (Programação em C)
+---------------------------------
+O código usa: struct (Req, Resp, Buf, Sessao), funções, vetores (occ[48], sess[64]), laços for e while,
+condicionais, manipulação de texto, arquivos (fopen para ler schema.sql), alocação de memória (malloc/realloc no Buf)
+e sockets. As funções mais interessantes para explicar e mostrar no texto:
+  criar_agendamento (server.c)   a regra de horário sem conflito
+  ocupacao (server.c)            o vetor de 48 blocos do dia
+  sha256 / hash_senha (util.c)   como a senha é protegida
+  buf_add / buf_esc (util.c)     texto que cresce sozinho e proteção contra XSS
+Todos do grupo precisam conseguir explicar como o sistema funciona: o professor pode pedir.
+
+Problemas comuns
+----------------
+  "gcc não é reconhecido"       o PATH não foi configurado (passo 1). Feche e abra o Prompt de Comando depois de mexer no PATH.
+  "falta sqlite3.c"             passo 2: os dois arquivos precisam estar na mesma pasta do server.c.
+  "a porta 8080 já está em uso" feche o outro programa, ou rode com outra porta: barbearia.exe 8081
+  Acentos estranhos na janela   use o iniciar.bat, que já ajusta a janela.
+  Não consegue ler o schema.sql rode o programa dentro da pasta do projeto (use o iniciar.bat).
+
+Observação: este sistema foi testado no Linux, com 109 verificações automáticas de todos os fluxos.
+A parte que fala com a rede no Windows (Winsock) está no código mas não pôde ser testada pelo ambiente
+onde foi criado. Se aparecer algum erro ao compilar ou rodar no Windows, mande a mensagem completa.
