@@ -1,0 +1,7 @@
+   *.db
+   *.db-journal
+   *.exe
+   *.o
+   barbearia
+   sqlite3.c
+   sqlite3.h
